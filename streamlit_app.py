@@ -58,6 +58,10 @@ def scrape_zerodha_calendar():
         "Country": countries
     }
     df = pd.DataFrame(data)
+    
+    # Debug: Print DataFrame to console
+    print(df.head())
+    
     return df
 
 # Main function to run the Streamlit app
@@ -67,6 +71,15 @@ def main():
 
     # Scrape the data
     df = scrape_zerodha_calendar()
+
+    # Check if DataFrame is empty
+    if df.empty:
+        st.error("No data available. Please check the scraping logic or the Zerodha website.")
+        return
+
+    # Debug: Display the DataFrame in Streamlit app
+    st.write("Scraped Data")
+    st.dataframe(df.head())  # Display the first few rows for verification
 
     # Extract unique countries for the filter
     countries = df["Country"].unique()
@@ -78,6 +91,7 @@ def main():
     filtered_df = df[df["Country"].isin(selected_countries)]
     
     # Display the filtered DataFrame
+    st.subheader("Filtered Data")
     st.dataframe(filtered_df)
 
 if __name__ == "__main__":
