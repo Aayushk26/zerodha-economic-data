@@ -8,7 +8,6 @@ import pytz
 
 url = 'https://zerodha.com/markets/calendar/'
 
-
 response = requests.get(url)
 da = None
 
@@ -49,7 +48,6 @@ def extract_country(event):
             return 'India'
     else:
         return 'India'
-
 
 
 da['Country'] = da['Event'].apply(extract_country)
@@ -106,7 +104,10 @@ def display_events(events):
 def main():
     st.title("Economic Calendar")
 
-    available_countries = da['Country'].unique().tolist()
+    # List of valid country names
+    valid_countries = ["India", "United States", "United Kingdom", "China", "Japan", "Germany", "France", "Euro Area"]
+
+    available_countries = [country for country in da['Country'].unique().tolist() if country in valid_countries]
 
     countries = st.multiselect("Select countries:", available_countries, default=["India"])
 
