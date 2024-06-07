@@ -1,98 +1,130 @@
-import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
+import re
+from datetime import datetime, timedelta
+import streamlit as st
+import pytz
 
-# Function to scrape data from Zerodha Economic Calendar
-def scrape_zerodha_calendar():
-    url = "https://zerodha.com/markets/calendar/"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, "html.parser")
-    
-    # Extracting data from the table
-    table = soup.find("table")
-    tbody = table.find("tbody")
+url = 'https://zerodha.com/markets/calendar/'
 
-    # Lists to hold the data
-    dates = []
-    events = []
-    importance = []
-    previous = []
-    actual = []
-    units = []
-    countries = []
 
-    # Temporary variable to hold the current date while iterating
-    current_date = ""
+response = requests.get(url)
+da = None
 
-    for row in tbody.find_all("tr"):
-        # Check if the row is a date row or an event row
-        if "date" in row.get("class", []):
-            current_date = row.find("td", class_="date").text.strip()
+if response.status_code == 200:
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    table = soup.find('table')
+
+    if table:
+        headers = []
+        for th in table.find('thead').find_all('th'):
+            headers.append(th.text.strip())
+
+        rows = []
+        for tr in table.find('tbody').find_all('tr'):
+            cells = []
+            for td in tr.find_all('td'):
+                cells.append(td.text.strip())
+            rows.append(cells)
+
+        df = pd.DataFrame(rows, columns=headers)
+        da = df
+        print(df)
+
+        df.to_csv('zerodha_calendar_data.csv', index=False)
+    else:
+        print('Table not found on the webpage.')
+else:
+    print(f'Failed to retrieve the webpage. Status code: {response.status_code}')
+
+
+def extract_country(event):
+    if isinstance(event, str):
+        match = re.search(r'\((.*?)\)', event)
+        if match:
+            return match.group(1)
         else:
-            event = row.find("td", class_=None).text.strip()
-            imp = row.find("span", class_="importance").text.strip()
-            prev = row.find("td", class_="prev").text.strip()
-            actl = row.find("td", class_="actual").text.strip()
-            unit = row.find("td", class_="unit").text.strip()
-            
-            # Extract country from event description (assuming it’s within parentheses)
-            country = event.split('(')[-1].replace(')', '').strip() if '(' in event else "Unknown"
-            
-            dates.append(current_date)
-            events.append(event)
-            importance.append(imp)
-            previous.append(prev)
-            actual.append(actl)
-            units.append(unit)
-            countries.append(country)
-    
-    # Creating a DataFrame
-    data = {
-        "Date": dates,
-        "Event": events,
-        "Importance": importance,
-        "Previous": previous,
-        "Actual": actual,
-        "Units": units,
-        "Country": countries
-    }
-    df = pd.DataFrame(data)
-    
-    # Debug: Print DataFrame to console
-    print(df.head())
-    
-    return df
+            return 'India'
+    else:
+        return 'India'
 
-# Main function to run the Streamlit app
-def main():
-    st.title("Zerodha Economic Calendar")
-    st.subheader("Filter events by country")
 
-    # Scrape the data
-    df = scrape_zerodha_calendar()
 
-    # Check if DataFrame is empty
-    if df.empty:
-        st.error("No data available. Please check the scraping logic or the Zerodha website.")
+da['Country'] = da['Event'].apply(extract_country)
+da['Date'] = da['Date'].astype(str)
+da['Date'] = da['Date'].replace('', pd.NA).fillna(method='ffill')
+da = da[da['Event'].notna()]
+
+da.reset_index(drop=True, inplace=True)
+
+
+def remove_country_from_event(event):
+    return re.sub(r'\s*\(.*?\)', '', event)
+
+
+da['Event'] = da['Event'].apply(remove_country_from_event)
+
+
+def display_events(events):
+    if events is None or events.empty:
+        st.write("No upcoming events found.")
         return
 
-    # Debug: Display the DataFrame in Streamlit app
-    st.write("Scraped Data")
-    st.dataframe(df.head())  # Display the first few rows for verification
+    events['Day'] = pd.to_datetime(events['Date'], format='%a, %d %b %Y').dt.tz_localize('UTC').dt.tz_convert(
+        'Asia/Kolkata').dt.strftime('%A')
 
-    # Extract unique countries for the filter
-    countries = df["Country"].unique()
-    
-    # Multi-select widget for country filter
-    selected_countries = st.multiselect("Select countries", options=countries, default=countries)
+    events['Days from Today'] = (pd.to_datetime(events['Date'], format='%a, %d %b %Y') - pd.Timestamp('today')).dt.days
 
-    # Filter data based on selected countries
-    filtered_df = df[df["Country"].isin(selected_countries)]
-    
-    # Display the filtered DataFrame
-    st.subheader("Filtered Data")
-    st.dataframe(filtered_df)
+    def highlight_importance(val):
+        if val == 'High':
+            color = 'lightcoral'
+        elif val == 'Medium':
+            color = 'lightblue'
+        elif val == 'Low':
+            color = 'lightgreen'
+        else:
+            color = ''
+        return f'background-color: {color}'
 
-if __name__ == "__main__":
-    main()
+    events_styled = events.style.applymap(highlight_importance, subset=['Importance'])
+
+    legend_style = "background-color: rgba(240, 240, 240, 0.7); padding: 8px; margin-bottom: 8px;"
+    st.markdown(
+        "<div style='" + legend_style + "'>"
+                                        "<div style='background-color:lightcoral;padding:8px;margin-bottom:4px;'>High Importance</div>"
+                                        "<div style='background-color:lightblue;padding:8px;margin-bottom:4px;'>Medium Importance</div>"
+                                        "<div style='background-color:lightgreen;padding:8px;margin-bottom:4px;'>Low Importance</div>"
+                                        "</div>",
+        unsafe_allow_html=True
+    )
+
+    st.dataframe(events_styled, width=1000, height=600)
+
+
+def main():
+    st.title("Economic Calendar")
+
+    available_countries = da['Country'].unique().tolist()
+
+    countries = st.multiselect("Select countries:", available_countries, default=["India"])
+
+    date_ranges = {
+        "7 days from today": 7,
+        "14 days from today": 14,
+        "1 month from today": 30,
+    }
+    selected_range = st.selectbox("Select date range:", list(date_ranges.keys()), index=1)
+    max_days = date_ranges[selected_range]
+    today = datetime.today().strftime('%a, %d %b %Y')
+    to_date = (datetime.today() + timedelta(days=max_days)).strftime('%a, %d %b %Y')
+
+    if countries:
+        filtered_events = da[(da['Country'].isin(countries)) &
+                             (pd.to_datetime(da['Date'], format='%a, %d %b %Y') >= pd.to_datetime(today)) &
+                             (pd.to_datetime(da['Date'], format='%a, %d %b %Y') <= pd.to_datetime(to_date))]
+        display_events(filtered_events)
+
+
+main()
