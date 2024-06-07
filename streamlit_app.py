@@ -5,6 +5,7 @@ import re
 from datetime import datetime, timedelta
 import streamlit as st
 import pytz
+from pycountry import countries
 
 url = 'https://zerodha.com/markets/calendar/'
 
@@ -104,10 +105,13 @@ def display_events(events):
 def main():
     st.title("Economic Calendar")
 
-    # List of valid country names
-    valid_countries = ["India", "United States", "United Kingdom", "China", "Japan", "Germany", "France", "Euro Area"]
+    # List of valid country names from pycountry
+    valid_country_names = {country.name for country in countries}
 
-    available_countries = [country for country in da['Country'].unique().tolist() if country in valid_countries]
+    # Include "Euro Area" in the list of valid names
+    valid_country_names.add("Euro Area")
+
+    available_countries = [country for country in da['Country'].unique().tolist() if country in valid_country_names]
 
     countries = st.multiselect("Select countries:", available_countries, default=["India"])
 
