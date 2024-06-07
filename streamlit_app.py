@@ -5,7 +5,7 @@ import re
 from datetime import datetime, timedelta
 import streamlit as st
 import pytz
-from pycountry import countries
+from pycountry import countries as pycountries
 
 url = 'https://zerodha.com/markets/calendar/'
 
@@ -106,14 +106,14 @@ def main():
     st.title("Economic Calendar")
 
     # List of valid country names from pycountry
-    valid_country_names = {country.name for country in countries}
+    valid_country_names = {country.name for country in pycountries}
 
     # Include "Euro Area" in the list of valid names
     valid_country_names.add("Euro Area")
 
     available_countries = [country for country in da['Country'].unique().tolist() if country in valid_country_names]
 
-    countries = st.multiselect("Select countries:", available_countries, default=["India"])
+    selected_countries = st.multiselect("Select countries:", available_countries, default=["India"])
 
     date_ranges = {
         "7 days from today": 7,
@@ -125,11 +125,13 @@ def main():
     today = datetime.today().strftime('%a, %d %b %Y')
     to_date = (datetime.today() + timedelta(days=max_days)).strftime('%a, %d %b %Y')
 
-    if countries:
-        filtered_events = da[(da['Country'].isin(countries)) &
+    if selected_countries:
+        filtered_events = da[(da['Country'].isin(selected_countries)) &
                              (pd.to_datetime(da['Date'], format='%a, %d %b %Y') >= pd.to_datetime(today)) &
                              (pd.to_datetime(da['Date'], format='%a, %d %b %Y') <= pd.to_datetime(to_date))]
         display_events(filtered_events)
 
 
 main()
+
+
