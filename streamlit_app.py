@@ -58,21 +58,18 @@ da = da[da['Event'].notna()]
 
 da.reset_index(drop=True, inplace=True)
 
+# Reorder columns: place 'Country' after 'Date'
+da = da[['Date', 'Country'] + [col for col in da.columns if col not in ['Date', 'Country']]]
 
 def remove_country_from_event(event):
     return re.sub(r'\s*\(.*?\)', '', event)
 
-
 da['Event'] = da['Event'].apply(remove_country_from_event)
-
 
 def display_events(events):
     if events is None or events.empty:
         st.write("No upcoming events found.")
         return
-
-    events['Day'] = pd.to_datetime(events['Date'], format='%a, %d %b %Y').dt.tz_localize('UTC').dt.tz_convert(
-        'Asia/Kolkata').dt.strftime('%A')
 
     events['Days from Today'] = (pd.to_datetime(events['Date'], format='%a, %d %b %Y') - pd.Timestamp('today')).dt.days
 
@@ -133,5 +130,4 @@ def main():
 
 
 main()
-
 
